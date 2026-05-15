@@ -14,12 +14,6 @@
     const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF6Ynh0Y3F0bnhkbmZjYmVyZGtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4NDExNzgsImV4cCI6MjA5NDQxNzE3OH0.GBk4X5eAoKlO4gP9yMlRz1X7qjQnG_FgVlA7E-9F6-Q";
     const dbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
   </script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script>
-    const SUPABASE_URL = "https://azbxtcqtnxdnfcberdke.supabase.co";
-    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF6Ynh0Y3F0bnhkbmZjYmVyZGtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4NDExNzgsImV4cCI6MjA5NDQxNzE3OH0.GBk4X5eAoKlO4gP9yMlRz1X7qjQnG_FgVlA7E-9F6-Q";
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-  </script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: #f0ede8; font-family: 'DM Sans', sans-serif; }
@@ -92,7 +86,7 @@ const EST = { pendiente: "○", "en-proceso": "◑", completado: "●" };
 // ── STORAGE (Supabase) ────────────────────────────────────────
 async function loadFromDB(table, fallback) {
   try {
-    const { data, error } = await supabase.from(table).select("*");
+    const { data, error } = await dbClient.from(table).select("*");
     if (error || !data || data.length === 0) return fallback;
     return data;
   } catch { return fallback; }
@@ -100,13 +94,13 @@ async function loadFromDB(table, fallback) {
 
 async function upsertToDB(table, records) {
   try {
-    await supabase.from(table).upsert(records, { onConflict: "id" });
+    await dbClient.from(table).upsert(records, { onConflict: "id" });
   } catch {}
 }
 
 async function deleteFromDB(table, id) {
   try {
-    await supabase.from(table).delete().eq("id", id);
+    await dbClient.from(table).delete().eq("id", id);
   } catch {}
 }
 
@@ -172,19 +166,6 @@ function App() {
   const [pendientes, setPendientesRaw] = useState(SEED_PENDIENTES);
   const [movimientos, setMovimientosRaw] = useState(SEED_MOVIMIENTOS);
   const [dbLoaded, setDbLoaded] = useState(false);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const { data: p } = await dbClient.from("pendientes").select("*");
-        const { data: m } = await dbClient.from("movimientos").select("*");
-        if (p && p.length > 0) setPendientesRaw(p);
-        if (m && m.length > 0) setMovimientosRaw(m);
-      } catch(e) { console.log("DB error:", e); }
-      setDbLoaded(true);
-    })();
-  }, []);
-
 
   useEffect(() => {
     (async () => {
