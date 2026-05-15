@@ -8,6 +8,12 @@
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    const SUPABASE_URL = "https://azbxtcqtnxdnfcberdke.supabase.co";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF6Ynh0Y3F0bnhkbmZjYmVyZGtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4NDExNzgsImV4cCI6MjA5NDQxNzE3OH0.GBk4X5eAoKlO4gP9yMlRz1X7qjQnG_FgVlA7E-9F6-Q";
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  </script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: #f0ede8; font-family: 'DM Sans', sans-serif; }
@@ -77,12 +83,25 @@ const SEED_MOVIMIENTOS = [
 const PR = { alta: { label: "Alta", color: "#C04A4A", bg: "rgba(192,74,74,0.1)" }, media: { label: "Media", color: "#B08A30", bg: "rgba(176,138,48,0.1)" }, baja: { label: "Baja", color: "#3A9E6B", bg: "rgba(58,158,107,0.1)" } };
 const EST = { pendiente: "○", "en-proceso": "◑", completado: "●" };
 
-// ── STORAGE (localStorage) ────────────────────────────────────
-function loadLS(key, fallback) {
-  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
+// ── STORAGE (Supabase) ────────────────────────────────────────
+async function loadFromDB(table, fallback) {
+  try {
+    const { data, error } = await supabase.from(table).select("*");
+    if (error || !data || data.length === 0) return fallback;
+    return data;
+  } catch { return fallback; }
 }
-function saveLS(key, val) {
-  try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
+
+async function upsertToDB(table, records) {
+  try {
+    await supabase.from(table).upsert(records, { onConflict: "id" });
+  } catch {}
+}
+
+async function deleteFromDB(table, id) {
+  try {
+    await supabase.from(table).delete().eq("id", id);
+  } catch {}
 }
 
 // ── HELPERS ───────────────────────────────────────────────────
@@ -144,8 +163,19 @@ const Select = ({ children, ...props }) => <select {...props} style={{ width: "1
 
 // ── APP ───────────────────────────────────────────────────────
 function App() {
-  const [pendientes, setPendientesRaw] = useState(() => loadLS("cmd-pendientes", SEED_PENDIENTES));
-  const [movimientos, setMovimientosRaw] = useState(() => loadLS("cmd-movimientos", SEED_MOVIMIENTOS));
+  const [pendientes, setPendientesRaw] = useState(SEED_PENDIENTES);
+  const [movimientos, setMovimientosRaw] = useState(SEED_MOVIMIENTOS);
+  const [dbLoaded, setDbLoaded] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const p = await loadFromDB("pendientes", SEED_PENDIENTES);
+      const m = await loadFromDB("movimientos", SEED_MOVIMIENTOS);
+      setPendientesRaw(p);
+      setMovimientosRaw(m);
+      setDbLoaded(true);
+    })();
+  }, []);
   const [view, setView] = useState("dashboard");
   const [activeCompany, setActiveCompany] = useState("tecnocyclo");
   const [activeSubunit, setActiveSubunit] = useState(null);
@@ -157,7 +187,7 @@ function App() {
   const setPendientes = (fn) => {
     setPendientesRaw(prev => {
       const next = typeof fn === "function" ? fn(prev) : fn;
-      saveLS("cmd-pendientes", next);
+      upsertToDB("pendientes", next);
       return next;
     });
   };
@@ -165,7 +195,7 @@ function App() {
   const setMovimientos = (fn) => {
     setMovimientosRaw(prev => {
       const next = typeof fn === "function" ? fn(prev) : fn;
-      saveLS("cmd-movimientos", next);
+      upsertToDB("movimientos", next);
       return next;
     });
   };
@@ -182,9 +212,9 @@ function App() {
     setShowModal(false);
   };
 
-  const deletePendiente = (id) => setPendientes(prev => prev.filter(p => p.id !== id));
+  const deletePendiente = (id) => { deleteFromDB("pendientes", id); setPendientesRaw(prev => prev.filter(p => p.id !== id)); };
   const toggleMovimiento = (id) => setMovimientos(prev => prev.map(m => m.id === id ? { ...m, completado: !m.completado } : m));
-  const deleteMovimiento = (id) => setMovimientos(prev => prev.filter(m => m.id !== id));
+  const deleteMovimiento = (id) => { deleteFromDB("movimientos", id); setMovimientosRaw(prev => prev.filter(m => m.id !== id)); };
 
   const addMovimiento = () => {
     if (!newMov.texto.trim()) return;
@@ -209,6 +239,14 @@ function App() {
     label: { fontSize: 10, color: "#888", fontFamily: "'DM Mono'", letterSpacing: "0.12em", textTransform: "uppercase" },
     card: { background: "#faf8f5", border: "1px solid #ddd9d4", borderRadius: 12 },
   };
+
+  if (!dbLoaded) return (
+    <div style={{ minHeight: "100vh", background: "#f0ede8", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
+      <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#3A9E6B", animation: "pulse 1s infinite" }} />
+      <div style={{ fontFamily: "'DM Mono'", fontSize: 11, color: "#999", letterSpacing: "0.1em" }}>CARGANDO DATOS...</div>
+      <style>{"@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(1.5)} }"}</style>
+    </div>
+  );
 
   return (
     <div style={{ minHeight: "100vh", background: "#f0ede8", color: "#1e1e1e", fontFamily: "'DM Sans', sans-serif", display: "flex", flexDirection: "column" }}>
